@@ -216,10 +216,6 @@ class AIModelService(AIModel):
 
     api_key: str = ""
 
-    api_key: str = ""
-
-    api_key: str = ""
-
     @staticmethod
     def _get_max_tokens(name: str, token_groups: dict[str, int]) -> int:
         """Dynamically resolves the max tokens from a base model."""
@@ -351,6 +347,7 @@ class AIModelOpenAI(AIModelService):
     def get_canonical_name(cls) -> str:
         """Get the canonical name of the OpenAI service."""
         return "openai_models.txt"
+
 
 
 @dataclass(frozen=True, kw_only=True)
