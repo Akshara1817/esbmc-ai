@@ -15,12 +15,14 @@ import structlog
 
 from anthropic import Anthropic as AnthropicClient
 from openai import Client as OpenAIClient
-
+from google import genai
+from google.genai import types
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import get_buffer_string
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
 from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain.schema import (
     BaseMessage,
@@ -31,6 +33,7 @@ from langchain.schema import (
 from esbmc_ai.log_utils import LogCategories
 from esbmc_ai.singleton import SingletonMeta
 
+from google.genai import types
 
 @dataclass(frozen=True, kw_only=True)
 class AIModel(ABC):
@@ -215,6 +218,8 @@ class AIModelService(AIModel):
 
     api_key: str = ""
 
+    api_key: str = ""
+
     @staticmethod
     def _get_max_tokens(name: str, token_groups: dict[str, int]) -> int:
         """Dynamically resolves the max tokens from a base model."""
@@ -340,12 +345,12 @@ class AIModelOpenAI(AIModelService):
     @classmethod
     def get_cache_filename(cls) -> str:
         """Get the cache filename for OpenAI service."""
-        return "openai_models.txt"
+        return "sample.txt"
 
     @classmethod
     def get_canonical_name(cls) -> str:
         """Get the canonical name of the OpenAI service."""
-        return "openai"
+        return "openai_models.txt"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -448,6 +453,71 @@ class AIModelAnthropic(AIModelService):
         """Get the canonical name of the Anthropic service."""
         return "anthropic"
 
+@dataclass(frozen=True, kw_only=True)
+class AIModelGoogle(AIModelService):
+
+    @override
+    def create_llm(self)->BaseChatModel:
+        kwargs={}
+        if self.api_key:
+            kwargs["api_key"]=SecretStr(self.api_key) or None
+        return ChatGoogleGenerativeAI(
+            model_name=self.name,
+            temperature=0,
+            max_tokens=None,
+            timeout=None,
+            max_retries=2,
+            model_kwargs={}
+            **kwargs,
+        )
+    @classmethod
+    def get_max_tokens(cls,name:str)->int:
+        tokens = {
+            "gemini-2.5": 65000,
+             }
+
+        return cls._get_max_tokens(name, tokens)
+
+    
+    @classmethod
+    def get_num_tokens(cls,content:str)->int:
+        encoding: tiktoken.Encoding = tiktoken.encoding_for_model(self.name)
+        return len(encoding.encode(content))
+
+
+    @classmethod
+    def get_num_tokens_from_messages(self,messages:list[BaseMessage])->int:
+        encoding: tiktoken.Encoding = tiktoken.encoding_for_model(self.name)
+        return sum(len(encoding.encode(get_buffer_string([m]))) for m in messages)
+
+
+    @classmethod
+    def get_models_list(cls, api_key: str) -> list[str]:
+        if not api_key:
+            return []
+        client = genai.Client()
+        try:
+            return [
+                str(model) for model in client.models.list()
+            ]
+        except ImportError:
+            return []      
+    
+    @classmethod
+    def create_model(cls, name: str) -> "AIModel":
+        return cls(
+            name=name.strip(),
+            tokens=cls.get_max_tokens(name),
+        )
+    
+    @classmethod
+    def get_cache_filename(cls):
+        return "google_genai.txt"
+
+    @classmethod
+    def get_canonical_name(cls):
+        return "google-genai"
+
 
 class AIModels(metaclass=SingletonMeta):
     """Manages the loading of AI Models from different sources."""
@@ -480,7 +550,7 @@ class AIModels(metaclass=SingletonMeta):
         self._api_keys = api_keys
 
         # Load models from each service
-        services = [AIModelOpenAI, AIModelAnthropic]
+        services = [AIModelOpenAI, AIModelAnthropic,AIModelGoogle]
         for service in services:
             api_key = api_keys.get(service.get_canonical_name(), "")
             self._load_service_ai_models_list(

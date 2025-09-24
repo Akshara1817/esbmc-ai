@@ -34,6 +34,7 @@ from esbmc_ai.ai_models import (
     AIModelOpenAI,
     AIModels,
     OllamaAIModel,
+    AIModelGoogle,
 )
 
 
@@ -343,6 +344,12 @@ class Config(BaseConfig, metaclass=makecls(SingletonMeta)):
                 default_value=None,
                 default_value_none=True,
             ),
+            ConfigField.from_env(
+                name="GEMINI_API_KEY",
+                default_value=None,
+                default_value_none=True,
+            ),
+            
         )
 
         fields: list[ConfigField] = self.get_config_fields()
@@ -396,6 +403,8 @@ class Config(BaseConfig, metaclass=makecls(SingletonMeta)):
                 AIModelAnthropic.get_canonical_name(): self.get_value(
                     "ANTHROPIC_API_KEY"
                 ),
+                AIModelGoogle.get_canonical_name(): self.get_value("GEMINI_API_KEY"),
+                
             },
         )
         # Load AI models and set ai_model
